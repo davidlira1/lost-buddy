@@ -1,0 +1,14 @@
+# PlatformIO build outputs and downloaded libraries
+.pio/
+
+# clangd and compiler compilation database
+compile_commands.json
+.cache/
+.clangd/
+
+# VS Code / IDE auto-generated configuration
+.vscode/*
+!.vscode/extensions.json
+
+# macOS system files
+.DS_Store
