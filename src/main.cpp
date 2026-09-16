@@ -1,12 +1,16 @@
 #include <Arduino.h>
 
 #include "gps_service.h"
+#include "lora_radio.h"
 #include "packet_codec.h"
 #include "telemetry.h"
 
 namespace {
 HardwareSerial gps_serial(2);
 GpsService gps(gps_serial);
+
+HardwareSerial lora_serial(1);
+LoraRadio lora(lora_serial);
 
 Telemetry telemetry;
 uint32_t seq = 0;
@@ -17,11 +21,13 @@ constexpr uint32_t kPublishIntervalMs = 1000;
 void setup() {
   Serial.begin(115200);
   gps.begin();
+  lora.begin();
   Serial.println("GPS parse + packet ready");
 }
 
 void loop() {
   gps.update();
+  lora.update();
 
   const uint32_t now = millis();
   if ((now - last_publish_ms) < kPublishIntervalMs) {
@@ -37,9 +43,13 @@ void loop() {
   telemetry.seq = ++seq;
 
   char line[PacketCodec::kMaxEncodedLen];
-  if (PacketCodec::encode(telemetry, line, sizeof(line)) == 0) {
+  const size_t n = PacketCodec::encode(telemetry, line, sizeof(line));
+  if (n == 0) {
     return;
   }
 
   Serial.println(line);
+  if (!lora.send(line, n)) {
+    Serial.println("lora: send skipped");
+  }
 }
