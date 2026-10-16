@@ -8,8 +8,8 @@
 import CoreLocation
 import Foundation
 
-/// Tracks the active heading session so a callback captured earlier cannot publish into a later one.
-final class HeadingSessionGate: @unchecked Sendable {
+/// Tracks one sensor session so a callback captured earlier cannot publish into a later one.
+final class SensorSessionGate: @unchecked Sendable {
     private let lock = NSLock()
     private var identifier = 0
     private var running = false
@@ -51,7 +51,7 @@ final class HeadingSessionGate: @unchecked Sendable {
 @MainActor
 final class CoreLocationHeadingProvider: NSObject, HeadingProvider, CLLocationManagerDelegate {
     private let manager: CLLocationManager
-    private nonisolated let sessions = HeadingSessionGate()
+    private nonisolated let sessions = SensorSessionGate()
     private var continuation: AsyncStream<HeadingEvent>.Continuation?
 
     override init() {

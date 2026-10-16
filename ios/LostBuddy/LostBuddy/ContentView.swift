@@ -22,22 +22,28 @@ enum DashboardPalette {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tracker = TrackerDisplayState()
     @State private var headingModel: HeadingViewModel
+    @State private var navigationModel: NavigationViewModel
 
     @MainActor
-    init(headingProvider: any HeadingProvider) {
-        _headingModel = State(
-            initialValue: HeadingViewModel(
-                provider: headingProvider,
-                targetBearing: TrackerDisplayState().directionDegrees
+    init(headingProvider: any HeadingProvider, locationProvider: any LocationProvider) {
+        _headingModel = State(initialValue: HeadingViewModel(provider: headingProvider))
+        _navigationModel = State(
+            initialValue: NavigationViewModel(
+                provider: locationProvider,
+                tracker: MockTrackerLocation.coordinate
             )
         )
     }
 
     @MainActor
     init() {
-        self.init(headingProvider: CoreLocationHeadingProvider())
+        self.init(
+            headingProvider: CoreLocationHeadingProvider(),
+            locationProvider: CoreLocationProvider()
+        )
     }
 
     var body: some View {
@@ -50,7 +56,8 @@ struct ContentView: View {
             Spacer(minLength: 12)
             CompassView(
                 dialRotation: headingModel.dialRotation,
-                arrowRotation: headingModel.arrowRotation
+                arrowRotation: headingModel.arrowRotation,
+                showsDirection: headingModel.showsLiveDirection
             )
             .padding(.horizontal, 8)
             Spacer(minLength: 16)
@@ -62,15 +69,51 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashboardPalette.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .onAppear { headingModel.start() }
-        .onDisappear { headingModel.stop() }
+        .onAppear {
+            headingModel.start()
+            navigationModel.start()
+            headingModel.updateTargetBearing(navigationModel.bearingDegrees)
+        }
+        .onDisappear {
+            headingModel.stop()
+            navigationModel.stop()
+        }
+        .onChange(of: navigationModel.bearingDegrees) { _, bearing in
+            headingModel.updateTargetBearing(bearing)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                navigationModel.sceneDidBecomeActive()
+            case .background:
+                navigationModel.sceneDidEnterBackground()
+            default:
+                break
+            }
+        }
     }
 
     private var statusCaption: some View {
-        Text(headingModel.statusMessage ?? "Bluetooth, GPS, and last update are mock")
+        Text(captionText)
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(DashboardPalette.label)
             .multilineTextAlignment(.center)
+    }
+
+    private var captionText: String {
+        if let locationCaption = navigationModel.statusCaption {
+            return locationCaption
+        }
+        if let headingCaption = headingModel.statusMessage {
+            return headingCaption
+        }
+        if !headingModel.showsLiveDirection {
+            return "Direction unavailable"
+        }
+        if headingModel.directionIsApproximate {
+            return "Direction is approximate (magnetic heading)"
+        }
+        return "Bluetooth is mock. No tracker telemetry."
     }
 
     private var header: some View {
@@ -107,7 +150,7 @@ struct ContentView: View {
                 .tracking(2.2)
                 .foregroundStyle(DashboardPalette.label)
 
-            Text("\(tracker.distanceMeters) m")
+            Text(navigationModel.formattedDistance)
                 .font(.system(size: 56, weight: .bold))
                 .foregroundStyle(.white)
                 .minimumScaleFactor(0.6)
@@ -120,19 +163,22 @@ struct ContentView: View {
             StatusCardView(
                 systemImage: "antenna.radiowaves.left.and.right",
                 iconColor: DashboardPalette.gps,
-                title: "GPS SIGNAL",
-                value: tracker.gpsSignal
+                title: "PHONE GPS",
+                value: navigationModel.phoneGPSValue
             )
             StatusCardView(
                 systemImage: "clock",
                 iconColor: DashboardPalette.clock,
                 title: "LAST UPDATE",
-                value: tracker.lastUpdate
+                value: "No telemetry"
             )
         }
     }
 }
 
 #Preview {
-    ContentView(headingProvider: ManualHeadingProvider())
+    ContentView(
+        headingProvider: ManualHeadingProvider(),
+        locationProvider: ManualLocationProvider()
+    )
 }
