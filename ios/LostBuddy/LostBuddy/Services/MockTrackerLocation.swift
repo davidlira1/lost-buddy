@@ -7,7 +7,8 @@
 
 import Foundation
 
-/// Simulated tracker position. This is not a live BLE or LoRa fix.
+/// Origin for the simulated tracker path. This is not a live BLE or LoRa fix.
+/// Navigation follows tracker connection updates rather than reading this coordinate directly.
 enum MockTrackerFixture {
     /// Golden Gate Bridge. Far from a typical desk test.
     case goldenGateBridge

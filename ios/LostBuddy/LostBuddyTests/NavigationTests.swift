@@ -277,6 +277,29 @@ struct NavigationTests {
         model.stop()
     }
 
+    @Test @MainActor func trackerUpdatesRecalculateAndClearWithoutDroppingThePhoneFix() async {
+        let provider = ManualLocationProvider()
+        let model = NavigationViewModel(provider: provider)
+        model.start()
+        provider.send(.coordinate(oneDegreeNorth))
+        await waitUntil { model.locationStatus == .fix }
+        #expect(model.distanceMeters == nil)
+        #expect(model.bearingDegrees == nil)
+        #expect(model.formattedDistance == "—")
+        #expect(model.phoneGPSValue == "Fix")
+
+        model.updateTracker(origin)
+        expectAngle(model.bearingDegrees, 180)
+        #expect(model.formattedDistance.contains("km"))
+
+        model.updateTracker(nil)
+        #expect(model.bearingDegrees == nil)
+        #expect(model.distanceMeters == nil)
+        #expect(model.locationStatus == .fix)
+        #expect(model.formattedDistance == "—")
+        model.stop()
+    }
+
     private func expectAngle(_ actual: Double?, _ expected: Double) {
         #expect(actual != nil)
         guard let actual else { return }
