@@ -23,26 +23,27 @@ enum DashboardPalette {
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @State private var tracker = TrackerDisplayState()
     @State private var headingModel: HeadingViewModel
     @State private var navigationModel: NavigationViewModel
+    @State private var trackerModel: TrackerConnectionViewModel
 
     @MainActor
-    init(headingProvider: any HeadingProvider, locationProvider: any LocationProvider) {
+    init(
+        headingProvider: any HeadingProvider,
+        locationProvider: any LocationProvider,
+        trackerProvider: any TrackerConnectionProvider
+    ) {
         _headingModel = State(initialValue: HeadingViewModel(provider: headingProvider))
-        _navigationModel = State(
-            initialValue: NavigationViewModel(
-                provider: locationProvider,
-                tracker: MockTrackerLocation.coordinate
-            )
-        )
+        _navigationModel = State(initialValue: NavigationViewModel(provider: locationProvider))
+        _trackerModel = State(initialValue: TrackerConnectionViewModel(provider: trackerProvider))
     }
 
     @MainActor
     init() {
         self.init(
             headingProvider: CoreLocationHeadingProvider(),
-            locationProvider: CoreLocationProvider()
+            locationProvider: CoreLocationProvider(),
+            trackerProvider: TrackerTransport.makeProvider()
         )
     }
 
@@ -72,21 +73,29 @@ struct ContentView: View {
         .onAppear {
             headingModel.start()
             navigationModel.start()
+            trackerModel.start()
+            navigationModel.updateTracker(trackerModel.liveCoordinate)
             headingModel.updateTargetBearing(navigationModel.bearingDegrees)
         }
         .onDisappear {
             headingModel.stop()
             navigationModel.stop()
+            trackerModel.stop()
         }
         .onChange(of: navigationModel.bearingDegrees) { _, bearing in
             headingModel.updateTargetBearing(bearing)
+        }
+        .onChange(of: trackerModel.liveCoordinate) { _, coordinate in
+            navigationModel.updateTracker(coordinate)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
                 navigationModel.sceneDidBecomeActive()
+                trackerModel.sceneDidBecomeActive()
             case .background:
                 navigationModel.sceneDidEnterBackground()
+                trackerModel.sceneDidEnterBackground()
             default:
                 break
             }
@@ -107,13 +116,19 @@ struct ContentView: View {
         if let headingCaption = headingModel.statusMessage {
             return headingCaption
         }
+        if trackerModel.liveLocation == nil, trackerModel.lastKnown != nil, let trackerCaption = trackerModel.statusCaption {
+            return trackerCaption
+        }
         if !headingModel.showsLiveDirection {
             return "Direction unavailable"
         }
         if headingModel.directionIsApproximate {
             return "Direction is approximate (magnetic heading)"
         }
-        return "Bluetooth is mock. No tracker telemetry."
+        if let trackerCaption = trackerModel.statusCaption {
+            return trackerCaption
+        }
+        return "Simulated tracker. Not hardware."
     }
 
     private var header: some View {
@@ -131,16 +146,28 @@ struct ContentView: View {
     }
 
     private var connectionBadge: some View {
-        HStack(spacing: 6) {
+        let status = connectionStatus
+        return HStack(spacing: 6) {
             Image(systemName: "bluetooth")
                 .font(.system(size: 13, weight: .semibold))
-            Text(tracker.connection.label)
+            Text(trackerModel.badgeLabel)
                 .font(.system(size: 15, weight: .semibold))
         }
-        .foregroundStyle(tracker.connection.tint)
+        .foregroundStyle(status.tint)
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(tracker.connection.tint.opacity(0.18), in: Capsule())
+        .background(status.tint.opacity(0.18), in: Capsule())
+    }
+
+    private var connectionStatus: ConnectionStatus {
+        switch trackerModel.linkState {
+        case .connected:
+            .connected
+        case .connecting:
+            .connecting
+        case .disconnected:
+            .disconnected
+        }
     }
 
     private var distanceSection: some View {
@@ -170,7 +197,7 @@ struct ContentView: View {
                 systemImage: "clock",
                 iconColor: DashboardPalette.clock,
                 title: "LAST UPDATE",
-                value: "No telemetry"
+                value: trackerModel.lastUpdateValue
             )
         }
     }
@@ -179,6 +206,7 @@ struct ContentView: View {
 #Preview {
     ContentView(
         headingProvider: ManualHeadingProvider(),
-        locationProvider: ManualLocationProvider()
+        locationProvider: ManualLocationProvider(),
+        trackerProvider: ManualTrackerConnectionProvider(isSimulated: true)
     )
 }

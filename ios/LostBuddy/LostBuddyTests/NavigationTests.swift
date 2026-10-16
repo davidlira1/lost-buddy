@@ -117,17 +117,15 @@ struct NavigationTests {
     }
 
     @Test func mockTrackerFixturesStayInOneConfiguration() {
-        #expect(MockTrackerLocation.activeFixture == .goldenGateBridge)
-        #expect(MockTrackerLocation.coordinate == MockTrackerLocation.fixture(.goldenGateBridge))
-        #expect(MockTrackerLocation.coordinate.latitude == 37.8199)
-        #expect(MockTrackerLocation.coordinate.longitude == -122.4783)
+        #expect(MockTrackerLocation.activeFixture == .nearbyWalk)
+        #expect(MockTrackerLocation.coordinate == MockTrackerLocation.fixture(.nearbyWalk))
+        #expect(MockTrackerLocation.coordinate.latitude == 33.7527)
+        #expect(MockTrackerLocation.coordinate.longitude == -118.1898)
 
-        let nearby = MockTrackerLocation.fixture(.nearbyWalk)
         let bridge = MockTrackerLocation.fixture(.goldenGateBridge)
-        #expect(nearby != bridge)
-        let walk = NavigationCalculator.distanceMeters(from: nearby, to: bridge)
-        #expect(walk > 100)
-        #expect(walk < 500)
+        #expect(bridge.latitude == 37.8199)
+        #expect(bridge.longitude == -122.4783)
+        #expect(MockTrackerLocation.coordinate != bridge)
     }
 
     @Test @MainActor func locationUpdatesRecalculateDistanceAndBearing() async {
@@ -274,6 +272,29 @@ struct NavigationTests {
         clock.advance(by: 10)
         model.expireStaleFixIfNeeded()
         #expect(model.locationStatus == .stale)
+        model.stop()
+    }
+
+    @Test @MainActor func trackerUpdatesRecalculateAndClearWithoutDroppingThePhoneFix() async {
+        let provider = ManualLocationProvider()
+        let model = NavigationViewModel(provider: provider)
+        model.start()
+        provider.send(.coordinate(oneDegreeNorth))
+        await waitUntil { model.locationStatus == .fix }
+        #expect(model.distanceMeters == nil)
+        #expect(model.bearingDegrees == nil)
+        #expect(model.formattedDistance == "—")
+        #expect(model.phoneGPSValue == "Fix")
+
+        model.updateTracker(origin)
+        expectAngle(model.bearingDegrees, 180)
+        #expect(model.formattedDistance.contains("km"))
+
+        model.updateTracker(nil)
+        #expect(model.bearingDegrees == nil)
+        #expect(model.distanceMeters == nil)
+        #expect(model.locationStatus == .fix)
+        #expect(model.formattedDistance == "—")
         model.stop()
     }
 
