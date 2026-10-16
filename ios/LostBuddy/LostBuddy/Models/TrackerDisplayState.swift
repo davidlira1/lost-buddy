@@ -36,10 +36,6 @@ enum ConnectionStatus {
 }
 
 struct TrackerDisplayState {
-    var connection: ConnectionStatus = .connected
-    var distanceMeters: Int = 248
-    /// 0° is north, 90° is east, increasing clockwise.
-    var directionDegrees: Double = 315
-    var gpsSignal: String = "Active"
-    var lastUpdate: String = "2s ago"
+    /// Bluetooth is not connected in this phase. The badge stays disconnected until a real radio exists.
+    var connection: ConnectionStatus = .disconnected
 }

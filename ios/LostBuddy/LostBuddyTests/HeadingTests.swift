@@ -63,7 +63,7 @@ struct HeadingTests {
     }
 
     @Test func staleHeadingCallbacksDoNotEnterANewSession() {
-        let sessions = HeadingSessionGate()
+        let sessions = SensorSessionGate()
         let first = sessions.begin()
         #expect(first != nil)
         #expect(sessions.begin() == nil)
@@ -84,7 +84,8 @@ struct HeadingTests {
 
     @Test @MainActor func viewModelUsesProviderEventsWithoutInventingHeadings() async {
         let provider = ManualHeadingProvider()
-        let model = HeadingViewModel(provider: provider, targetBearing: 315)
+        let model = HeadingViewModel(provider: provider)
+        model.updateTargetBearing(315)
 
         model.start()
         #expect(provider.isRunning)
@@ -95,20 +96,24 @@ struct HeadingTests {
         #expect(model.phoneHeading == nil)
         #expect(model.northReference == nil)
         #expect(model.dialRotation == 0)
-        #expect(model.arrowRotation == 315)
+        #expect(model.arrowRotation == 0)
+        #expect(model.showsLiveDirection == false)
 
         provider.send(.heading(SelectedHeading(degrees: 90, north: .magnetic)))
         await waitUntil { model.phoneHeading == 90 }
         #expect(model.unavailableReason == nil)
         #expect(model.northReference == .magnetic)
         #expect(model.dialRotation == -90)
-        #expect(model.arrowRotation == 225)
+        #expect(model.arrowRotation == -135)
+        #expect(model.showsLiveDirection)
+        #expect(model.directionIsApproximate)
 
         provider.send(.unavailable(.authorizationDenied))
         await waitUntil { model.unavailableReason == .authorizationDenied }
         #expect(model.phoneHeading == 90)
         #expect(model.dialRotation == -90)
-        #expect(model.arrowRotation == 225)
+        #expect(model.arrowRotation == -135)
+        #expect(model.showsLiveDirection == false)
 
         model.stop()
         #expect(provider.isRunning == false)
@@ -116,7 +121,7 @@ struct HeadingTests {
 
     @Test @MainActor func viewModelTakesShortestPathAcrossNorth() async {
         let provider = ManualHeadingProvider()
-        let model = HeadingViewModel(provider: provider, targetBearing: 315)
+        let model = HeadingViewModel(provider: provider)
         model.start()
 
         provider.send(.heading(SelectedHeading(degrees: 359, north: .magnetic)))
@@ -132,7 +137,8 @@ struct HeadingTests {
 
     @Test @MainActor func repeatedStartAndStopRestartsUpdates() async {
         let provider = ManualHeadingProvider()
-        let model = HeadingViewModel(provider: provider, targetBearing: 315)
+        let model = HeadingViewModel(provider: provider)
+        model.updateTargetBearing(315)
 
         model.start()
         model.start()
@@ -144,7 +150,7 @@ struct HeadingTests {
         await waitUntil { model.phoneHeading == 20 }
         #expect(model.northReference == .magnetic)
         #expect(model.dialRotation == -20)
-        #expect(model.arrowRotation == 295)
+        #expect(model.arrowRotation == -65)
 
         model.stop()
         model.stop()
@@ -178,10 +184,99 @@ struct HeadingTests {
         await waitUntil { model.phoneHeading == 45 }
         #expect(model.northReference == .geographic)
         #expect(model.dialRotation == -45)
-        #expect(model.arrowRotation == 270)
+        #expect(model.arrowRotation == -90)
 
         model.stop()
         #expect(provider.isRunning == false)
+    }
+
+    @Test @MainActor func missingHeadingOrBearingDoesNotInventADirection() async {
+        let provider = ManualHeadingProvider()
+        let model = HeadingViewModel(provider: provider)
+        model.start()
+
+        model.updateTargetBearing(315)
+        #expect(model.arrowRotation == 0)
+        #expect(model.showsLiveDirection == false)
+
+        provider.send(.heading(SelectedHeading(degrees: 10, north: .geographic)))
+        await waitUntil { model.phoneHeading == 10 }
+        let liveArrow = model.arrowRotation
+        #expect(model.showsLiveDirection)
+        #expect(model.directionIsApproximate == false)
+
+        model.updateTargetBearing(nil)
+        #expect(model.arrowRotation == liveArrow)
+        #expect(model.showsLiveDirection == false)
+
+        model.stop()
+    }
+
+    @Test @MainActor func arrowTakesShortestPathWhenHeadingWrapsPastNorth() async {
+        let provider = ManualHeadingProvider()
+        let model = HeadingViewModel(provider: provider)
+        model.updateTargetBearing(10)
+        model.start()
+
+        provider.send(.heading(SelectedHeading(degrees: 359, north: .geographic)))
+        await waitUntil { model.phoneHeading == 359 }
+        let arrowWestOfNorth = model.arrowRotation
+
+        provider.send(.heading(SelectedHeading(degrees: 1, north: .geographic)))
+        await waitUntil { model.phoneHeading == 1 }
+        #expect(abs((model.arrowRotation - arrowWestOfNorth) - -2) < 0.001)
+
+        model.stop()
+    }
+
+    @Test @MainActor func unavailableHeadingHidesDirectionAndRestoresIt() async {
+        let provider = ManualHeadingProvider()
+        let model = HeadingViewModel(provider: provider)
+        model.updateTargetBearing(90)
+        model.start()
+
+        provider.send(.heading(SelectedHeading(degrees: 0, north: .geographic)))
+        await waitUntil { model.showsLiveDirection }
+        let dialWhileLive = model.dialRotation
+        #expect(model.arrowRotation == 90)
+
+        provider.send(.unavailable(.sensorUnavailable))
+        await waitUntil { model.unavailableReason == .sensorUnavailable }
+        #expect(model.showsLiveDirection == false)
+        #expect(model.dialRotation == dialWhileLive)
+
+        provider.send(.heading(SelectedHeading(degrees: 20, north: .geographic)))
+        await waitUntil { model.showsLiveDirection }
+        #expect(model.dialRotation == -20)
+        #expect(abs(model.arrowRotation - 70) < 0.001)
+        #expect(model.directionIsApproximate == false)
+
+        model.stop()
+    }
+
+    @Test @MainActor func unavailableBearingHidesDirectionAndRestoresIt() async {
+        let provider = ManualHeadingProvider()
+        let model = HeadingViewModel(provider: provider)
+        model.start()
+
+        provider.send(.heading(SelectedHeading(degrees: 45, north: .magnetic)))
+        await waitUntil { model.phoneHeading == 45 }
+        let dial = model.dialRotation
+        #expect(model.showsLiveDirection == false)
+
+        model.updateTargetBearing(135)
+        #expect(model.showsLiveDirection)
+        #expect(model.directionIsApproximate)
+        #expect(model.dialRotation == dial)
+
+        model.updateTargetBearing(nil)
+        #expect(model.showsLiveDirection == false)
+        #expect(model.dialRotation == dial)
+
+        model.updateTargetBearing(135)
+        #expect(model.showsLiveDirection)
+        #expect(model.dialRotation == -45)
+        model.stop()
     }
 
     @MainActor

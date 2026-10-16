@@ -12,6 +12,8 @@ struct CompassView: View {
     var dialRotation: Double
     /// Arrow rotation in degrees. Target bearing minus phone heading.
     var arrowRotation: Double
+    /// Hides the arrow when heading or target bearing cannot support a live direction.
+    var showsDirection: Bool = true
 
     var body: some View {
         Color.clear
@@ -57,7 +59,9 @@ struct CompassView: View {
                 .frame(width: side * 0.62, height: side * 0.62)
                 .shadow(color: DashboardPalette.arrow.opacity(0.28), radius: side * 0.03, y: side * 0.012)
                 .rotationEffect(.degrees(arrowRotation))
+                .opacity(showsDirection ? 1 : 0)
                 .animation(.easeOut(duration: 0.25), value: arrowRotation)
+                .animation(.easeOut(duration: 0.2), value: showsDirection)
 
             Circle()
                 .fill(.white)
