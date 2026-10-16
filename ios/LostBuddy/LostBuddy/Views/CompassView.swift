@@ -8,8 +8,10 @@
 import SwiftUI
 
 struct CompassView: View {
-    /// 0° is north, 90° is east, increasing clockwise.
-    var directionDegrees: Double
+    /// Dial rotation in degrees. Negative phone heading keeps north fixed in the world.
+    var dialRotation: Double
+    /// Arrow rotation in degrees. Target bearing minus phone heading.
+    var arrowRotation: Double
 
     var body: some View {
         Color.clear
@@ -22,9 +24,7 @@ struct CompassView: View {
     }
 
     private func compass(side: CGFloat) -> some View {
-        let center = side / 2
-
-        return ZStack {
+        ZStack {
             Circle()
                 .fill(
                     RadialGradient(
@@ -42,6 +42,35 @@ struct CompassView: View {
                         .stroke(DashboardPalette.ring, lineWidth: 1.5)
                 }
 
+            dial(side: side)
+                .rotationEffect(.degrees(dialRotation))
+                .animation(.easeOut(duration: 0.25), value: dialRotation)
+
+            CompassNeedle()
+                .fill(
+                    LinearGradient(
+                        colors: [DashboardPalette.arrowLight, DashboardPalette.arrow],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: side * 0.62, height: side * 0.62)
+                .shadow(color: DashboardPalette.arrow.opacity(0.28), radius: side * 0.03, y: side * 0.012)
+                .rotationEffect(.degrees(arrowRotation))
+                .animation(.easeOut(duration: 0.25), value: arrowRotation)
+
+            Circle()
+                .fill(.white)
+                .frame(width: side * 0.065, height: side * 0.065)
+                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        }
+        .frame(width: side, height: side)
+    }
+
+    private func dial(side: CGFloat) -> some View {
+        let center = side / 2
+
+        return ZStack {
             Circle()
                 .stroke(
                     DashboardPalette.ring,
@@ -56,23 +85,6 @@ struct CompassView: View {
             cardinal("E", x: side * 0.91, y: center, side: side)
             cardinal("S", x: center, y: side * 0.91, side: side)
             cardinal("W", x: side * 0.09, y: center, side: side)
-
-            CompassNeedle()
-                .fill(
-                    LinearGradient(
-                        colors: [DashboardPalette.arrowLight, DashboardPalette.arrow],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: side * 0.62, height: side * 0.62)
-                .shadow(color: DashboardPalette.arrow.opacity(0.28), radius: side * 0.03, y: side * 0.012)
-                .rotationEffect(.degrees(directionDegrees))
-
-            Circle()
-                .fill(.white)
-                .frame(width: side * 0.065, height: side * 0.065)
-                .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
         }
         .frame(width: side, height: side)
     }
@@ -118,7 +130,7 @@ private struct CompassNeedle: Shape {
 }
 
 #Preview {
-    CompassView(directionDegrees: 315)
+    CompassView(dialRotation: 0, arrowRotation: 315)
         .padding(32)
         .background(DashboardPalette.background)
 }
