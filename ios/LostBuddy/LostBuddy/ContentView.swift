@@ -23,15 +23,36 @@ enum DashboardPalette {
 
 struct ContentView: View {
     @State private var tracker = TrackerDisplayState()
+    @State private var headingModel: HeadingViewModel
+
+    @MainActor
+    init(headingProvider: any HeadingProvider) {
+        _headingModel = State(
+            initialValue: HeadingViewModel(
+                provider: headingProvider,
+                targetBearing: TrackerDisplayState().directionDegrees
+            )
+        )
+    }
+
+    @MainActor
+    init() {
+        self.init(headingProvider: CoreLocationHeadingProvider())
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            statusCaption
+                .padding(.top, 8)
             Spacer(minLength: 20)
             distanceSection
             Spacer(minLength: 12)
-            CompassView(directionDegrees: tracker.directionDegrees)
-                .padding(.horizontal, 8)
+            CompassView(
+                dialRotation: headingModel.dialRotation,
+                arrowRotation: headingModel.arrowRotation
+            )
+            .padding(.horizontal, 8)
             Spacer(minLength: 16)
             statusCards
         }
@@ -41,6 +62,15 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashboardPalette.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .onAppear { headingModel.start() }
+        .onDisappear { headingModel.stop() }
+    }
+
+    private var statusCaption: some View {
+        Text(headingModel.statusMessage ?? "Bluetooth, GPS, and last update are mock")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(DashboardPalette.label)
+            .multilineTextAlignment(.center)
     }
 
     private var header: some View {
@@ -104,5 +134,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(headingProvider: ManualHeadingProvider())
 }
