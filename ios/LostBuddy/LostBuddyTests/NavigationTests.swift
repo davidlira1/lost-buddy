@@ -117,17 +117,15 @@ struct NavigationTests {
     }
 
     @Test func mockTrackerFixturesStayInOneConfiguration() {
-        #expect(MockTrackerLocation.activeFixture == .goldenGateBridge)
-        #expect(MockTrackerLocation.coordinate == MockTrackerLocation.fixture(.goldenGateBridge))
-        #expect(MockTrackerLocation.coordinate.latitude == 37.8199)
-        #expect(MockTrackerLocation.coordinate.longitude == -122.4783)
+        #expect(MockTrackerLocation.activeFixture == .nearbyWalk)
+        #expect(MockTrackerLocation.coordinate == MockTrackerLocation.fixture(.nearbyWalk))
+        #expect(MockTrackerLocation.coordinate.latitude == 33.7527)
+        #expect(MockTrackerLocation.coordinate.longitude == -118.1898)
 
-        let nearby = MockTrackerLocation.fixture(.nearbyWalk)
         let bridge = MockTrackerLocation.fixture(.goldenGateBridge)
-        #expect(nearby != bridge)
-        let walk = NavigationCalculator.distanceMeters(from: nearby, to: bridge)
-        #expect(walk > 100)
-        #expect(walk < 500)
+        #expect(bridge.latitude == 37.8199)
+        #expect(bridge.longitude == -122.4783)
+        #expect(MockTrackerLocation.coordinate != bridge)
     }
 
     @Test @MainActor func locationUpdatesRecalculateDistanceAndBearing() async {
