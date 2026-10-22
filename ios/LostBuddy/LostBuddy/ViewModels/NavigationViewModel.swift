@@ -12,7 +12,8 @@ import Observation
 @Observable
 final class NavigationViewModel {
     private let provider: any LocationProvider
-    private let tracker: GeoCoordinate
+    private var tracker: GeoCoordinate?
+    private var phoneCoordinate: GeoCoordinate?
     private let clock: any NavigationClock
     private let freshnessInterval: TimeInterval
     private var streamTask: Task<Void, Never>?
@@ -25,7 +26,10 @@ final class NavigationViewModel {
     private(set) var locationStatus: LocationStatus = .searching
 
     var formattedDistance: String {
-        DistanceFormat.display(meters: distanceMeters)
+        if locationStatus == .fix, phoneCoordinate != nil, tracker == nil {
+            return "—"
+        }
+        return DistanceFormat.display(meters: distanceMeters)
     }
 
     var phoneGPSValue: String {
@@ -38,7 +42,7 @@ final class NavigationViewModel {
 
     init(
         provider: any LocationProvider,
-        tracker: GeoCoordinate,
+        tracker: GeoCoordinate? = nil,
         clock: any NavigationClock = SystemNavigationClock(),
         freshnessInterval: TimeInterval = LocationFixValidation.maximumAge
     ) {
@@ -102,9 +106,15 @@ final class NavigationViewModel {
         }
     }
 
+    func updateTracker(_ coordinate: GeoCoordinate?) {
+        tracker = coordinate
+        recalculate()
+    }
+
     func expireStaleFixIfNeeded() {
         guard let accepted = fixAcceptedAt else { return }
         guard clock.now.timeIntervalSince(accepted) >= freshnessInterval else { return }
+        phoneCoordinate = nil
         distanceMeters = nil
         bearingDegrees = nil
         locationStatus = .stale
@@ -120,18 +130,29 @@ final class NavigationViewModel {
     func apply(_ event: LocationEvent) {
         switch event {
         case .coordinate(let phone):
-            distanceMeters = NavigationCalculator.distanceMeters(from: phone, to: tracker)
-            bearingDegrees = NavigationCalculator.bearingDegrees(from: phone, to: tracker)
+            phoneCoordinate = phone
             locationStatus = .fix
             fixAcceptedAt = clock.now
             scheduleFreshnessExpiry()
+            recalculate()
         case .unavailable(let reason):
             fixAcceptedAt = nil
             cancelFreshnessExpiry()
+            phoneCoordinate = nil
             distanceMeters = nil
             bearingDegrees = nil
             locationStatus = reason.status
         }
+    }
+
+    private func recalculate() {
+        guard locationStatus == .fix, let phone = phoneCoordinate, let tracker else {
+            distanceMeters = nil
+            bearingDegrees = nil
+            return
+        }
+        distanceMeters = NavigationCalculator.distanceMeters(from: phone, to: tracker)
+        bearingDegrees = NavigationCalculator.bearingDegrees(from: phone, to: tracker)
     }
 
     private func scheduleFreshnessExpiry() {

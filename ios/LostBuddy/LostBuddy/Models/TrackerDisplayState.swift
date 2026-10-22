@@ -36,6 +36,5 @@ enum ConnectionStatus {
 }
 
 struct TrackerDisplayState {
-    /// Bluetooth is not connected in this phase. The badge stays disconnected until a real radio exists.
     var connection: ConnectionStatus = .disconnected
 }
