@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "bluetooth_payload_output.h"
 #include "lora_config.h"
 #include "rylr998_receiver.h"
 
@@ -7,11 +8,15 @@ namespace {
 HardwareSerial radio_serial(1);
 Rylr998Receiver module(radio_serial);
 RadioReceiver& radio = module;
+
+BluetoothPayloadOutput bluetooth;
+PayloadOutput& output = bluetooth;
 }  // namespace
 
 void setup() {
   Serial.begin(115200);
   radio.begin();
+  output.begin();
   Serial.println("receiver ready");
 }
 
@@ -24,4 +29,5 @@ void loop() {
     return;
   }
   Serial.println(payload);
+  output.publish(payload, length);
 }

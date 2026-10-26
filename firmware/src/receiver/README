@@ -1,2 +1,2 @@
-Prints LoRa payloads from the tracker on USB serial. Bluetooth is not implemented.
-The sketch talks to RadioReceiver; only rylr998_receiver knows the module's AT protocol.
+Receives LoRa payloads from the tracker and publishes them through PayloadOutput.
+BluetoothPayloadOutput notifies the raw bytes. USB serial still prints each payload.
